@@ -1,4 +1,4 @@
-# 💻 Terminal Style Calculator
+# 💻 Basic Calculator
 
 A sleek, retro terminal-themed calculator built using only client-side technologies. It features a custom neon glow, dynamic background effects, and a responsive design.
 
