@@ -20,15 +20,33 @@ This project is intentionally minimal and uses a core set of client-side web tec
 
 ## 🚀 Getting Started
 
-This project is a single-file application, making it incredibly easy to run.
+This project is designed for quick startup, requiring minimal configuration to run.
 
 1.  **Clone the Repository** (or download the files):
     ```bash
     git clone [YOUR_REPO_URL]
     ```
-2.  **Open the File:** Navigate to the `Frontend` folder and simply open the **`index.html`** file in any modern web browser.
+
+2.  **Install Python and Dependencies:**
+    
+    Before running the application, ensure you have **Python 3** installed on your system.
+    
+    Next, install the required web framework, **Flask**, using `pip`:
+    
     ```bash
-    open Frontend/index.html
+    pip install Flask
     ```
 
-The calculator is ready to use immediately!
+3.  **Run the Application:**
+    
+    Execute the main application file, `app.py`, from your terminal:
+    
+    ```bash
+    python app.py
+    ```
+    
+    The server will start, and a link will appear in your terminal (e.g., `http://127.0.0.1:5000/`).
+    
+    **Click this link** to open the calculator in your web browser.
+
+The calculator is now ready to use!
