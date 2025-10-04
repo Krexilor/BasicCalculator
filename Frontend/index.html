@@ -1,0 +1,525 @@
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+    // Custom Tailwind Configuration for the terminal look
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    // Defining custom colors based on the image's aesthetic
+                    'terminal-dark': '#0d0d0d',
+                    'terminal-line': '#333333',
+                    'terminal-primary': '#ff4488', // Pink/Red for data/numbers/functions
+                    'terminal-secondary': '#ffffff', // White for operators
+                },
+                fontFamily: {
+                    // Ensure a fixed-width font for the terminal effect
+                    mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
+                }
+            }
+        }
+    }
+</script>
+<style>
+    /* Custom styles for button appearance (MODIFIED) */
+    .calc-button {
+        border-right-width: 1px;
+        border-color: #333333;
+        height: 4rem; 
+        /* Enable smooth transitions for all changes */
+        transition: all 0.15s ease-out;
+        font-family: monospace;
+        font-size: 1.5rem;
+        user-select: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* Set base transform for smooth scaling */
+        transform: scale(1);
+        z-index: 1; /* Ensure buttons sit above the background */
+    }
+
+    /* Hover effect (MODIFIED) */
+    .calc-button:hover {
+        background-color: rgba(255, 68, 136, 0.1); 
+        /* Scale up slightly */
+        transform: scale(1.05); 
+        /* Add pink glow */
+        box-shadow: 0 0 8px rgba(255, 68, 136, 0.9), 0 0 15px rgba(255, 68, 136, 0.4);
+        /* Bring to front slightly so it sits over neighbors */
+        z-index: 2; 
+        position: relative;
+    }
+
+    /* Removes the right border from the 4th button in most rows */
+    .calc-grid > div > button:nth-child(4n) {
+        border-right-width: 0;
+    }
+    
+    /* NEW RULE: Removes the right border from the last button in the last row ('=') */
+    .calc-grid > .calc-row:last-of-type button:last-child {
+        border-right-width: 0;
+    }
+
+    .calc-row {
+        border-top: 1px dashed #333333;
+    }
+
+    /* Styling for the output display area (unchanged) */
+    .calc-display {
+        color: #FF4488;
+        border-bottom: 2px dashed #333333;
+        padding-bottom: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    /* Final bottom line mimic (unchanged) */
+    .calc-body-container::after {
+        content: "";
+        display: block;
+        border-top: 1px dashed #333333;
+        margin-top: 0.75rem;
+    }
+
+    /* --- Cursor Styles (unchanged) --- */
+    @keyframes blink {
+        50% { opacity: 0; }
+    }
+
+    .terminal-cursor {
+        animation: blink 0.7s step-start infinite;
+        width: 2px;
+        height: 1.75rem;
+        background-color: #ff4488;
+        position: absolute;
+        right: 0.5rem; 
+        bottom: 0.25rem;
+    }
+    
+    /* Ensure the current number display is relative to hold the absolute cursor */
+    #display-current {
+        position: relative;
+    }
+
+    /* Ensure the current number text takes the full width */
+    #current-text {
+        display: inline-block;
+        width: 100%; 
+    }
+    
+    /* --- FLOATING BACKGROUND STYLES (unchanged) --- */
+    #floating-bg {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        z-index: 0; /* Behind the calculator */
+    }
+
+    /* Keyframes for streaming outwards from the center */
+    @keyframes stream-out {
+        0% { 
+            transform: scale(0.1) translate(0, 0); 
+            opacity: 0.0; /* Start invisible */
+        }
+        5% { 
+            opacity: 0.15; /* Quickly become visible */
+        }
+        100% { 
+            /* Use custom properties set in JS to define the final spread vector */
+            /* Rotation is added here to complete the transformation */
+            transform: scale(1.5) translate(var(--spread-x), var(--spread-y)) rotate(360deg); 
+            opacity: 0.0; /* Fade out as they reach the edge */
+        }
+    }
+
+    /* Keyframes for the glowing and fading effect (retained for independent glow) */
+    @keyframes pulse-fade {
+        0%, 100% { opacity: 0.1; text-shadow: 0 0 5px #ff4488, 0 0 10px #ff4488; }
+        50% { opacity: 0.3; text-shadow: 0 0 15px #ff4488, 0 0 25px #ff4488; }
+    }
+    
+    /* Keyframes for the new breathing glow effect on the attribution text */
+    @keyframes breathing-glow {
+        0%, 100% {
+            opacity: 0.5;
+            text-shadow: 0 0 3px #ff4488, 0 0 6px #ff4488;
+        }
+        50% {
+            opacity: 0.9;
+            text-shadow: 0 0 10px #ff4488, 0 0 15px #ff4488;
+        }
+    }
+
+    .floating-item {
+        position: absolute;
+        color: rgba(255, 68, 136, 0.2);
+        font-family: monospace;
+        font-weight: bold;
+        pointer-events: none;
+        
+        /* Apply stream-out and pulse-fade */
+        animation-name: stream-out, pulse-fade;
+        animation-timing-function: cubic-bezier(0.2, 0.4, 0.6, 1), ease-in-out; /* Smooth acceleration outwards */
+        animation-iteration-count: infinite;
+        
+        /* Ensures transforms stack correctly */
+        transform-origin: center center;
+        
+        /* Custom properties for JS to target (default to 0) */
+        --spread-x: 0px; 
+        --spread-y: 0px;
+    }
+    
+    /* UPDATED CSS for Attribution */
+    #attribution {
+        position: fixed;
+        bottom: 1rem;
+        left: 1rem;
+        color: #FFFFFF; /* Using white so the shadow provides the color */
+        font-size: 1rem; /* Increased size (was 0.75rem) */
+        z-index: 10; /* Ensure it's on top of the background */
+        /* Apply the new breathing glow effect */
+        animation: breathing-glow 4s ease-in-out infinite; 
+    }
+</style>
+
+<div class="flex items-center justify-center min-h-screen bg-gray-900 p-4 font-mono relative">
+    
+    <!-- Floating Background Container (behind the calculator) -->
+    <div id="floating-bg"></div>
+    
+    <!-- Attribution Text (UPDATED WITH GLOW) -->
+    <div id="attribution">Made by Krexilor</div>
+
+    <!-- Calculator Body (ensure high z-index to stay on top) -->
+    <div id="calculator-body" class="calc-body-container max-w-xs w-full bg-terminal-dark rounded-xl shadow-2xl p-4 relative z-10">
+
+        <!-- NEW: Calculator Title (pt-2 replaces the old top dashed line) -->
+        <div class="text-center text-xl font-bold text-terminal-primary pt-2">
+            CALCULATOR
+        </div>
+
+        <!-- NEW: Dashed Line Separator (Line 1) -->
+        <div class="border-t-2 border-dashed border-terminal-line my-3"></div>
+
+        <!-- Display Area (This already contains the second dashed line via .calc-display border-bottom) -->
+        <div class="calc-display text-right overflow-hidden whitespace-nowrap px-2">
+            <!-- 1. The Equation (Always visible when active) -->
+            <div id="display-prev" class="text-lg text-gray-500"></div>
+            <!-- 2. The Current Number/Answer (Larger, Primary Color) -->
+            <div id="display-current" class="text-4xl h-12">
+                <!-- Inner span holds the actual number text -->
+                <span id="current-text"></span>
+                <!-- Blinking cursor element (now empty content, styled by CSS) -->
+                <span id="cursor" class="terminal-cursor"></span>
+            </div>
+        </div>
+
+        <!-- Button Grid (4 columns) -->
+        <div id="calc-grid" class="grid grid-cols-4 text-center calc-grid">
+            
+            <!-- Row 1: C, ±, %, ÷ -->
+            <div class="calc-row contents">
+                <button class="calc-button text-terminal-primary" data-type="clear">C</button>
+                <button class="calc-button text-terminal-primary" data-type="toggleSign">±</button>
+                <button class="calc-button text-terminal-primary" data-type="percentage">%</button>
+                <button class="calc-button text-terminal-secondary" data-type="operator" data-value="/">&divide;</button>
+            </div>
+
+            <!-- Row 2: 7, 8, 9, x -->
+            <div class="calc-row contents">
+                <button class="calc-button text-terminal-primary" data-type="number" data-value="7">7</button>
+                <button class="calc-button text-terminal-primary" data-type="number" data-value="8">8</button>
+                <button class="calc-button text-terminal-primary" data-type="number" data-value="9">9</button>
+                <button class="calc-button text-terminal-secondary" data-type="operator" data-value="*">&times;</button>
+            </div>
+
+            <!-- Row 3: 4, 5, 6, - -->
+            <div class="calc-row contents">
+                <button class="calc-button text-terminal-primary" data-type="number" data-value="4">4</button>
+                <button class="calc-button text-terminal-primary" data-type="number" data-value="5">5</button>
+                <button class="calc-button text-terminal-primary" data-type="number" data-value="6">6</button>
+                <button class="calc-button text-terminal-secondary" data-type="operator" data-value="-">-</button>
+            </div>
+
+            <!-- Row 4: 1, 2, 3, + -->
+            <div class="calc-row contents">
+                <button class="calc-button text-terminal-primary" data-type="number" data-value="1">1</button>
+                <button class="calc-button text-terminal-primary" data-type="number" data-value="2">2</button>
+                <button class="calc-button text-terminal-primary" data-type="number" data-value="3">3</button>
+                <button class="calc-button text-terminal-secondary" data-type="operator" data-value="+">+</button>
+            </div>
+
+            <!-- Row 5: 0 (span 2), ., = -->
+            <div class="calc-row contents">
+                <button class="calc-button text-terminal-primary col-span-2" data-type="number" data-value="0">0</button>
+                <button class="calc-button text-terminal-primary" data-type="number" data-value=".">.</button>
+                <button class="calc-button text-terminal-secondary" data-type="equals">=</button>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // Functionality to generate the floating background elements
+    const createFloatingBackground = () => {
+        const bgContainer = document.getElementById('floating-bg');
+        const symbols = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '+', '-', '×', '÷', 'C', '=', '%', '±', '.'];
+        const count = 80; // Increased number of streaming items
+
+        // Clear existing items before generating new ones
+        bgContainer.innerHTML = '';
+
+        for (let i = 0; i < count; i++) {
+            const item = document.createElement('div');
+            item.classList.add('floating-item');
+
+            // Randomly select a symbol
+            item.textContent = symbols[Math.floor(Math.random() * symbols.length)];
+
+            // 1. Set the initial position near the center (where the calculator is)
+            const initialX = 50 + (Math.random() - 0.5) * 10; // 45vw to 55vw
+            const initialY = 50 + (Math.random() - 0.5) * 10; // 45vh to 55vh
+            item.style.left = `${initialX}vw`;
+            item.style.top = `${initialY}vh`;
+
+            // 2. Calculate the "sprout" vector/direction (angle from center)
+            // Angle (in radians) from the center (50, 50) to the item's initial position (initialX, initialY)
+            const angle = Math.atan2(initialY - 50, initialX - 50);
+            
+            // Set the spread distance (large arbitrary distance in pixels to push it off screen)
+            const spreadDistance = 2500; 
+            const finalTranslateX = Math.cos(angle) * spreadDistance;
+            const finalTranslateY = Math.sin(angle) * spreadDistance;
+            
+            // Set custom CSS properties to define the final translation target
+            item.style.setProperty('--spread-x', `${finalTranslateX}px`);
+            item.style.setProperty('--spread-y', `${finalTranslateY}px`);
+
+            // 3. Set random size and initial rotation
+            const randomScale = Math.random() * 0.5 + 0.1; // Scale between 0.1 and 0.6
+            const randomRotation = Math.random() * 360; 
+            
+            // Set initial transform (scale and starting angle)
+            item.style.transform = `scale(${randomScale}) rotate(${randomRotation}deg)`;
+            item.style.fontSize = `${Math.random() * 3 + 4}rem`; 
+
+            // 4. Set animation properties
+            const streamDuration = `${Math.random() * 15 + 15}s`; // 15s to 30s for slower stream speed
+            const pulseDuration = `${Math.random() * 3 + 2}s`;
+            // Use negative delay to ensure they are already streaming when the page loads
+            const delay = `-${Math.random() * 20}s`; 
+
+            item.style.animationName = `stream-out, pulse-fade`;
+            item.style.animationDuration = `${streamDuration}, ${pulseDuration}`;
+            item.style.animationDelay = `${delay}, ${delay}`;
+            
+            bgContainer.appendChild(item);
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Calculator Logic (Existing) ---
+        const currentText = document.getElementById('current-text');
+        const prevDisplay = document.getElementById('display-prev');
+        const cursor = document.getElementById('cursor');
+        const buttons = document.querySelectorAll('#calc-grid button');
+
+        // State now uses an empty string by default instead of '0'
+        let currentOperand = '';
+        let previousOperand = '';
+        let operation = undefined;
+        let waitingForSecondOperand = false;
+
+        // Utility to show/hide cursor
+        const setCursorVisible = (isVisible) => {
+            cursor.style.display = isVisible ? 'inline' : 'none';
+            // If the cursor is visible and the input is empty, ensure the display is cleared
+            if (isVisible && currentOperand === '') {
+                currentText.textContent = ''; 
+            }
+        };
+
+        // Function to update the display elements (CURSOR LOGIC REMOVED FROM HERE)
+        const updateDisplay = () => {
+            // 1. Update the main result/current input display
+            const displayValue = currentOperand === '' ? '' : currentOperand;
+            
+            // Handle large number display
+            if (displayValue.length > 12) {
+                currentText.textContent = parseFloat(displayValue).toExponential(5);
+            } else {
+                currentText.textContent = displayValue;
+            }
+
+            // 2. Update the equation display (display-prev)
+            const symbolMap = { '/': '÷', '*': '×', '-': '-', '+': '+' };
+            const operatorSymbol = symbolMap[operation] || '';
+            
+            if (operation != null) {
+                // Show the full equation: [first number] [operator] [current number being typed]
+                // If currentOperand is empty, show a placeholder '?' for the number being typed
+                const secondOperandDisplay = currentOperand === '' ? '?' : currentOperand;
+                prevDisplay.textContent = `${previousOperand} ${operatorSymbol} ${secondOperandDisplay}`;
+            } else {
+                // After clear or equals, equation line is cleared
+                prevDisplay.textContent = '';
+            }
+        };
+
+        // Resets all state variables
+        const clear = () => {
+            currentOperand = ''; // Reset to empty string
+            previousOperand = '';
+            operation = undefined;
+            waitingForSecondOperand = false;
+            setCursorVisible(true); // <--- SHOW cursor on clear
+        };
+
+        // Handles number and decimal point input
+        const inputNumber = (number) => {
+            if (currentOperand.length >= 15 && !waitingForSecondOperand) return;
+
+            if (waitingForSecondOperand) {
+                // Start new number after operator/equals
+                currentOperand = number;
+                waitingForSecondOperand = false;
+            } else {
+                // Check for decimal point edge case when starting input
+                if (number === '.' && currentOperand === '') {
+                    currentOperand = '0.';
+                } 
+                // Prevent multiple decimal points
+                else if (number === '.' && currentOperand.includes('.')) {
+                    return;
+                } else {
+                    currentOperand = currentOperand + number;
+                }
+            }
+            setCursorVisible(false); // <--- HIDE cursor while typing
+        };
+
+        // Sets the operation and prepares for the next number
+        const chooseOperation = (op) => {
+            if (currentOperand === '' && previousOperand === '') return; // Don't allow operator if no number is typed
+
+            if (previousOperand !== '') {
+                // Chain operation: calculate the pending operation
+                if(currentOperand !== '') {
+                    calculate();
+                }
+                previousOperand = currentOperand;
+                operation = op;
+            } else {
+                operation = op;
+                previousOperand = currentOperand;
+            }
+
+            // Prepare for the next operand input
+            currentOperand = ''; // Reset current input for next number
+            waitingForSecondOperand = true;
+            setCursorVisible(true); // <--- SHOW cursor after operator press
+        };
+
+        // Performs the final calculation
+        const calculate = () => {
+            let result;
+            const prev = parseFloat(previousOperand);
+            const current = parseFloat(currentOperand === '' ? previousOperand : currentOperand); // Use first operand if equals is pressed without second
+
+            if (isNaN(prev) || isNaN(current)) return;
+
+            switch (operation) {
+                case '+':
+                    result = prev + current;
+                    break;
+                case '-':
+                    result = prev - current;
+                    break;
+                case '*':
+                    result = prev * current;
+                    break;
+                case '/':
+                    // Handle division by zero
+                    if (current === 0) {
+                        currentOperand = 'Error';
+                        previousOperand = '';
+                        operation = undefined;
+                        setCursorVisible(false);
+                        return;
+                    }
+                    result = prev / current;
+                    break;
+                default:
+                    // If no operation is set but equals is pressed, do nothing
+                    return;
+            }
+
+            // Use toFixed to control precision for floating point numbers
+            currentOperand = parseFloat(result.toFixed(10)).toString();
+            operation = undefined;
+            previousOperand = '';
+            waitingForSecondOperand = true; // Calculation complete, ready for next input
+            setCursorVisible(false); // <--- HIDE cursor after equals (displaying answer)
+        };
+        
+        // Toggles the sign of the current number
+        const toggleSign = () => {
+            const num = parseFloat(currentOperand);
+            if (isNaN(num) || currentOperand === 'Error' || currentOperand === '') return;
+            currentOperand = (num * -1).toString();
+            setCursorVisible(false); // Hide cursor after modifying input
+        };
+
+        // Converts the current number to a percentage
+        const percentage = () => {
+            const num = parseFloat(currentOperand);
+            if (isNaN(num) || currentOperand === 'Error' || currentOperand === '') return;
+            currentOperand = (num / 100).toString();
+            setCursorVisible(false); // Hide cursor after modifying input
+        };
+
+
+        // Event listener for all calculator buttons
+        buttons.forEach(button => {
+            button.addEventListener('click', () => {
+                const type = button.dataset.type;
+                const value = button.dataset.value;
+
+                if (currentOperand === 'Error' && type !== 'clear') return;
+
+                switch (type) {
+                    case 'number':
+                        inputNumber(value);
+                        break;
+                    case 'operator':
+                        chooseOperation(value);
+                        break;
+                    case 'equals':
+                        calculate();
+                        break;
+                    case 'clear':
+                        clear();
+                        break;
+                    case 'toggleSign':
+                        toggleSign();
+                        break;
+                    case 'percentage':
+                        percentage();
+                        break;
+                }
+                updateDisplay();
+            });
+        });
+        
+        // --- Run setup ---
+        createFloatingBackground(); // Create the animated background
+        clear();
+        updateDisplay();
+    });
+</script>
